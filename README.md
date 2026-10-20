@@ -1,11 +1,18 @@
-# X-Men Android prototype (development branch content)
+# X-Men Android prototype
 
-This repository was requested as the destination for the X-Men Android prototype. The original local ZIP contains additional extracted assets and reports; those binary assets have **not** all been uploaded by this commit.
+هذا المستودع هو وجهة النقل الأولية لمشروع نموذج لعبة X-Men للهاتف.
 
-## Android build
-The `.github/workflows/build-apk.yml` workflow builds the Android app and publishes a debug APK as a GitHub Actions artifact.
+## الملفات الحالية
+- تطبيق Android يستخدم WebView.
+- نموذج لعب HTML أولي.
+- GitHub Actions لمحاولة بناء APK تجريبي.
+- `TRANSFER_STATUS_AR.md` يوضح الملفات التي ما زالت بحاجة إلى النقل.
 
-## Status
-- Android WebView prototype scaffold.
-- This is not a finished recreation of X-Men: The Official Game.
-- Cascadeur animation authoring, rigging/weights, original textures and an on-device APK test remain outstanding.
+## تنبيه حول الحالة
+هذا ليس إصدارًا نهائيًا ولا نسخة مطابقة من لعبة X-Men: The Official Game. لم تُنجز بعد حركات Cascadeur فعلية، ولم يتم التحقق من APK ناجح على جهاز حقيقي. النماذج الشبكية المحوّلة وحدها لا تعني أن الشخصيات مجهزة بهيكل عظمي وأوزان تحريك.
+
+## الخطوات التالية
+1. نقل ملفات العرض ثلاثي الأبعاد والنماذج والخامات إلى المستودع.
+2. اختبار بناء Android عبر صفحة Actions.
+3. تجهيز الشخصيات للتحريك داخل Cascadeur ثم تصدير الحركات ودمجها في اللعبة.
+4. اختبار APK على الهاتف قبل اعتباره جاهزًا.
