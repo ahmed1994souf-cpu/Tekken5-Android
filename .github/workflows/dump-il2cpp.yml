@@ -260,6 +260,31 @@ jobs:
           print(json.dumps(report,indent=2))
           PY
 
+      - name: Build combat string index
+        if: always()
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import json, re
+          from pathlib import Path
+          p=Path("output/stringliteral.json")
+          if not p.exists():
+              Path("combat-string-index.txt").write_text("stringliteral.json missing\\n")
+              raise SystemExit(0)
+          data=json.loads(p.read_text(errors="ignore"))
+          rx=re.compile(r"attack|grapple|impact|injur|pinfall|pinning|submission|winner|damage|ground|throw|stun|knock|referee|count|match over|victory", re.I)
+          rows=[]
+          for item in data:
+              val=item.get("value", "")
+              if isinstance(val, str) and rx.search(val):
+                  rows.append((item.get("address", ""), val.replace("\\n", " ").replace("\\r", " ")))
+          rows.sort(key=lambda x: str(x[0]))
+          out=[f"Combat-related string candidates: {len(rows)}", "Addresses are the dumper's reported string addresses; they are not yet code XREFs.", ""]
+          out += [f"{addr}  {val}" for addr,val in rows]
+          Path("combat-string-index.txt").write_text("\\n".join(out)+"\\n", encoding="utf-8")
+          print("Indexed combat-related strings:", len(rows))
+          PY
+
       - name: Upload dump results
         if: always()
         uses: actions/upload-artifact@v4
@@ -273,4 +298,4 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 # Re-trigger native disassembly for combat candidates; source metadata and outputs remain unchanged.
-# Refresh trigger: 2026-10-21T22:00Z
+# Refresh trigger: 2026-10-21T22:10Z
