@@ -25,7 +25,7 @@ jobs:
 
       - name: Download libil2cpp.so
         env:
-          DOWNLOAD_URL: ${{ inputs.libil2cpp_url }}
+          DOWNLOAD_URL: ${{ inputs.libil2cpp_url || 'https://www.transfernow.net/dl/20261021AnYkeiDs/bIZha9hd' }}
         run: |
           set -euo pipefail
           curl --fail --location --retry 2 --connect-timeout 20 --max-time 300 \
