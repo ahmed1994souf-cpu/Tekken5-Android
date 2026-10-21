@@ -68,3 +68,36 @@ Roster type exists in the dump and has 16 RVA-annotated methods. Example RVAs: `
 2. Cross-reference the gameplay strings from `stringliteral.json` with `script.json` metadata and native references where the dump format exposes them.
 3. Build an evidence-labelled index for grapple, ground moves, rope climbing, ring generation, and match result flow. Keep hypotheses separate from confirmed links.
 4. Preserve the original APK/library and do not patch or redistribute game binaries as part of this documentation pass.
+
+
+## Additional high-value finding: `World` — TypeDefIndex 43
+
+The dump contains a large static `World` class with **71 RVA-annotated methods** and fields that explicitly model the 3D environment. This is a stronger structural lead for arena/ring generation than the string table alone.
+
+Confirmed fields and offsets:
+- World bounds and ground: `ground` `0x18`, `ceiling` `0x1C`, `farNorth` `0x20`, `farSouth` `0x24`, `farEast` `0x28`, `farWest` `0x2C`
+- Arena object/config: `gArena` `0x190`, `arenaShape` `0x198`, `arenaBarriers` `0x19C`, `arenaAnimator` `0x1A0`
+- Ring object/config: `ringPreset` `0x1B8`, `no_rings` `0x1BC`, `ringShape` `0x1C0`, `no_sides` `0x1C4`
+- Ring geometry objects: `gRing` `0x1C8`, `gApron` `0x1D8`, `gPosts` `0x1E0`, `gSupports` `0x1E8`, `gPads` `0x1F0`, `gMat` `0x1F8`
+- Ring size/height: `ringSize` `0x230`, `ringGround` `0x234`, `ringMiddle` `0x238`, `ringTop` `0x23C`
+- Rope state: `ringRopes` `0x258`, `no_ropes` `0x25C`, `gRope` `0x268`, `ropeX` `0x270`, `ropeY` `0x278`, `ropeZ` `0x280`, `ropeA` `0x288`
+
+Selected confirmed method RVAs in `World`:
+- `FGGIDBMDABF(int, string, Material)` — `0x15F2444`
+- `JCEFGNCCKBP(int, string)` — `0x15F285C`
+- `LIOJCIHHADC(float, float)` — `0x15F337C`
+- `MLMENMKKAFO(int, float, float)` — `0x15F34D0`
+- `CHCAFKMCJLL(float, float, float)` — `0x1602258`
+- `GAHIOBCHIEA(int, float, float, int, int)` — `0x160A848`
+- `CFODAEAICGJ()` — `0x160DD68`
+- `KIECDIACDMG(int)` — `0x1611214`
+- `EGPOIGLAKPP(float, float, float)` — `0x161156C`
+
+The method names remain obfuscated. Their positions among ring/arena fields make them candidates for further analysis, but do not establish each method's exact behavior.
+
+## Updated priority order
+
+1. **World (TypeDefIndex 43):** inspect method signatures and references around arena, ring, ropes, collision bounds, and construction strings.
+2. **Character (TypeDefIndex 116):** trace move arrays and character state fields to call sites and candidate combat methods.
+3. **Match/result controller:** locate classes whose fields/methods reference pinfall, entrants, match-ending, or winner dialogue strings.
+4. **AI:** identify the actual update/decision loop before assigning meanings to obfuscated methods.
