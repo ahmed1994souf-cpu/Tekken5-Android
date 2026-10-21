@@ -1,0 +1,101 @@
+name: Dump Wrestling Empire IL2CPP
+on:
+  workflow_dispatch:
+    inputs:
+      libil2cpp_url:
+        description: "Direct download URL for libil2cpp.so (TransferNow share page may not be a direct URL)"
+        required: true
+        type: string
+        default: "https://www.transfernow.net/dl/20261021AnYkeiDs/bIZha9hd"
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository (metadata file)
+        uses: actions/checkout@v4
+
+      - name: Download libil2cpp.so
+        env:
+          DOWNLOAD_URL: ${{ inputs.libil2cpp_url }}
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 2 --connect-timeout 20 --max-time 300 \
+            --user-agent "Mozilla/5.0" "$DOWNLOAD_URL" -o libil2cpp.download
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("libil2cpp.download")
+          with p.open("rb") as f:
+              head = f.read(16)
+          if not head.startswith(b"\\x7fELF"):
+              print("Download did not return an ELF shared library.")
+              print("First bytes:", repr(head))
+              print("The TransferNow share page may require a browser or a direct download URL.")
+              raise SystemExit("Provide a direct file-download URL, or upload libil2cpp.so to this repository.")
+          p.rename("libil2cpp.so")
+          print("Verified ELF shared library; bytes:", Path("libil2cpp.so").stat().st_size)
+          PY
+
+      - name: Locate metadata
+        id: metadata
+        run: |
+          set -euo pipefail
+          META="$(find . -type f -iname 'global-metadata.dat' -not -path './.git/*' -print -quit)"
+          if [ -z "$META" ]; then
+            echo "global-metadata.dat was not found in the repository checkout."
+            exit 1
+          fi
+          echo "path=$META" >> "$GITHUB_OUTPUT"
+          echo "Using metadata: $META"
+          ls -lh "$META" libil2cpp.so
+
+      - name: Download Il2CppDumper
+        run: |
+          set -euo pipefail
+          API="https://api.github.com/repos/Perfare/Il2CppDumper/releases/latest"
+          curl --fail --location --retry 2 "$API" -o release.json
+          ASSET_URL="$(python3 - <<'PY'
+          import json
+          d=json.load(open("release.json"))
+          assets=d.get("assets", [])
+          matches=[a for a in assets if "linux" in a["name"].lower() and a["name"].lower().endswith(".zip")]
+          if not matches:
+              raise SystemExit("Could not find a Linux ZIP asset in the latest Il2CppDumper release.")
+          print(matches[0]["browser_download_url"])
+          PY
+          )"
+          curl --fail --location --retry 2 "$ASSET_URL" -o dumper.zip
+          mkdir dumper
+          unzip -q dumper.zip -d dumper
+          chmod +x "$(find dumper -type f -iname 'Il2CppDumper' -print -quit)"
+
+      - name: Run Il2CppDumper
+        run: |
+          set -euo pipefail
+          BIN="$(find dumper -type f -iname 'Il2CppDumper' -print -quit)"
+          if [ -z "$BIN" ]; then
+            echo "Il2CppDumper executable was not found in the release archive."
+            find dumper -maxdepth 3 -type f
+            exit 1
+          fi
+          mkdir -p output
+          "$BIN" "$GITHUB_WORKSPACE/libil2cpp.so" "$GITHUB_WORKSPACE/${{ steps.metadata.outputs.path }}" "$GITHUB_WORKSPACE/output" || {
+            echo "Il2CppDumper failed. Common causes: metadata and libil2cpp.so are from different game versions/ABIs, or the binary is protected."
+            exit 1
+          }
+          find output -maxdepth 3 -type f -printf '%p (%s bytes)\n' | head -100
+
+      - name: Upload dump results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrestling-empire-il2cpp-dump
+          path: |
+            output/
+            libil2cpp.download
+          if-no-files-found: warn
+          retention-days: 7
