@@ -1,0 +1,34 @@
+name: Inspect uploaded IL2CPP metadata
+
+on:
+  push:
+    paths:
+      - "takken 5/global-metadata.dat"
+      - "takken 5/reverse-engineering/tools/inspect_metadata_first_pass.py"
+      - ".github/workflows/inspect-il2cpp-metadata.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect-metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inspect metadata header and game-related strings
+        run: |
+          python "takken 5/reverse-engineering/tools/inspect_metadata_first_pass.py" \
+            "takken 5/global-metadata.dat" --out metadata-first-pass
+      - name: Upload metadata diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: wrestling-empire-metadata-first-pass
+          path: metadata-first-pass/
+          if-no-files-found: error
+          retention-days: 14
