@@ -201,7 +201,7 @@ jobs:
               raise SystemExit(0)
           with binary.open("rb") as f:
               magic = f.read(4)
-          if magic != b"\\x7fELF":
+          if magic != bytes([0x7f, 0x45, 0x4c, 0x46]):
               report.write_text(f"ERROR: file is not ELF; magic={magic!r}; path={binary}\n")
               raise SystemExit(0)
           report.write_text(f"Binary: {binary}\nSize: {binary.stat().st_size}\nELF magic: {magic!r}\n")
