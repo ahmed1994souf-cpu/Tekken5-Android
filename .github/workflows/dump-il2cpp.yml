@@ -273,3 +273,4 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 # Re-trigger native disassembly for combat candidates; source metadata and outputs remain unchanged.
+# Refresh trigger: 2026-10-21T22:00Z
