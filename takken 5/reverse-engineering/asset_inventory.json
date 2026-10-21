@@ -1,0 +1,35 @@
+{
+  "source": {
+    "name": "Wrestling Empire",
+    "version": "1.8.0",
+    "package": "com.MDickie.WrestlingEmpire",
+    "version_code": 87,
+    "min_sdk": 32,
+    "target_sdk": 36
+  },
+  "engine": {
+    "name": "Unity",
+    "version": "6000.3.25f1",
+    "backend": "IL2CPP"
+  },
+  "xapk": {
+    "base_apk": "com.MDickie.WrestlingEmpire.apk",
+    "asset_pack": "UnityDataAssetPack.apk",
+    "abi_split": "config.arm64_v8a.apk"
+  },
+  "asset_pack_entries": [
+    "assets/bin/Data/datapack.unity3d",
+    "assets/bin/Data/resources.resource",
+    "assets/costumes",
+    "assets/music",
+    "assets/sound",
+    "assets/sprites",
+    "assets/world"
+  ],
+  "native_libraries": [
+    "lib/arm64-v8a/libil2cpp.so",
+    "lib/arm64-v8a/libunity.so",
+    "lib/arm64-v8a/libmain.so"
+  ],
+  "reimplementation_policy": "Use architecture and observable behavior as reference; do not copy proprietary game code or assets."
+}
