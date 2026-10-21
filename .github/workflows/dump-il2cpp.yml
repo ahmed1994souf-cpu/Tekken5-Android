@@ -140,15 +140,55 @@ jobs:
           "$BIN" --help || true
 
       - name: Run Il2CppDumper
+        id: dump
+        continue-on-error: true
         run: |
-          set -euo pipefail
-          BIN="$(find dumper -type f -iname 'Il2CppDumper' -print -quit)"
+          set -uo pipefail
+          BIN="$GITHUB_WORKSPACE/dumper/Il2CppDumper"
           mkdir -p output
-          "$BIN" "$GITHUB_WORKSPACE/libil2cpp.so" "$GITHUB_WORKSPACE/${{ steps.metadata.outputs.path }}" "$GITHUB_WORKSPACE/output" || {
-            echo "Il2CppDumper failed. Common causes: metadata and libil2cpp.so are from different game versions/ABIs, or the binary is protected."
+          set +e
+          "$BIN" "$GITHUB_WORKSPACE/libil2cpp.so" "$GITHUB_WORKSPACE/${{ steps.metadata.outputs.path }}" "$GITHUB_WORKSPACE/output" > dumper.log 2>&1
+          DUMPER_STATUS=$?
+          set -e
+          cat dumper.log
+          echo "exit_code=$DUMPER_STATUS" >> "$GITHUB_OUTPUT"
+          if [ -s output/dump.cs ] && [ -s output/script.json ] && [ -s output/il2cpp.h ]; then
+            echo "Dump files were generated. The program may crash only during its final Console.ReadKey prompt."
+            echo "dump_files_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Required dump files were not generated."
+            echo "dump_files_present=false" >> "$GITHUB_OUTPUT"
             exit 1
-          }
-          find output -maxdepth 3 -type f -printf '%p (%s bytes)\n' | head -100
+          fi
+
+      - name: Verify generated dump and summarize
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json, hashlib
+          out=Path("output")
+          report={"files":{}}
+          for name in ["dump.cs","script.json","il2cpp.h","stringliteral.json"]:
+              p=out/name
+              if p.exists():
+                  h=hashlib.sha256(p.read_bytes()).hexdigest()
+                  report["files"][name]={"size_bytes":p.stat().st_size,"sha256":h}
+          dump=out/"dump.cs"
+          if dump.exists():
+              s=dump.read_text(errors="ignore")
+              report["dump_cs_evidence"]={
+                "contains_Character_class":"public class Character" in s,
+                "contains_SaveData_class":"class SaveData" in s,
+                "contains_moveAttack":"moveAttack" in s,
+                "contains_moveGround":"moveGround" in s,
+                "contains_ringShape":"ringShape" in s,
+                "contains_ringRopes":"ringRopes" in s,
+                "RVA_method_count":s.count("// RVA:")
+              }
+          Path("dump_summary.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
+          print(json.dumps(report,indent=2))
+          PY
 
       - name: Upload dump results
         if: always()
@@ -157,8 +197,7 @@ jobs:
           name: wrestling-empire-il2cpp-dump
           path: |
             output/
-            libil2cpp.download
-            libil2cpp.so
-            transfernow-start-url.txt
+            dumper.log
+            dump_summary.json
           if-no-files-found: warn
-          retention-days: 7
+          retention-days: 14
