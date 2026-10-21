@@ -1,0 +1,30 @@
+name: Check IL2CPP inspection helper
+
+on:
+  push:
+    paths:
+      - "takken 5/reverse-engineering/tools/**"
+      - ".github/workflows/il2cpp-tool-check.yml"
+  pull_request:
+    paths:
+      - "takken 5/reverse-engineering/tools/**"
+      - ".github/workflows/il2cpp-tool-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-helper:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile helper
+        run: python -m py_compile "takken 5/reverse-engineering/tools/inspect_il2cpp_inputs.py"
+      - name: Verify command-line help
+        run: python "takken 5/reverse-engineering/tools/inspect_il2cpp_inputs.py" --help
