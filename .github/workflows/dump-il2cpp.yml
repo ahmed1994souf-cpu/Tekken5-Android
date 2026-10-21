@@ -179,7 +179,7 @@ jobs:
           fi
 
       - name: Disassemble combat candidate ranges (ARM64)
-        if: always() && hashFiles('libil2cpp.so') != ''
+        if: always()
         continue-on-error: true
         run: |
           set -u
@@ -187,28 +187,49 @@ jobs:
           sudo apt-get install -y llvm
           mkdir -p native-disassembly
           llvm-objdump --version | head -n 2 > native-disassembly/tool-version.txt
-          # Addresses below were cross-checked against dump.cs and script.json.
-          # Each window is a candidate region only; names do not establish behavior.
-          while read -r name address; do
-            start=$((address - 128))
-            stop=$((address + 256))
-            printf 'Candidate: %s\nAddress/RVA: 0x%x\nWindow: 0x%x..0x%x\n' \\
-              "$name" "$address" "$start" "$stop" > "native-disassembly/$name.txt"
-            llvm-objdump -d --start-address="$start" --stop-address="$stop" libil2cpp.so \\
-              >> "native-disassembly/$name.txt" 2>&1 || true
-          done <<'CANDIDATES'
-          Character_MEKEMKCMCNN 0x187B054
-          Character_DOBMPDMNJBK 0x187B41C
-          Character_CKHMPNPJAJE 0x187C0F4
-          Character_EPNEPBPKCBH 0x187D5F4
-          Character_NEGGBOHACLG 0x187DD58
-          Character_INCNPAABEDN 0x187DDD8
-          Character_OMLNHJGBMOG 0x187DEB8
-          Character_IIOABFAHAGD 0x187DF20
-          Scene_Game_Update 0x159C578
-          Scene_Game_Start 0x159D7F4
-          CANDIDATES
-          ls -lh native-disassembly || true
+          python3 - <<'PY'
+          import os, subprocess
+          from pathlib import Path
+          binary = Path("libil2cpp.so")
+          if not binary.is_file():
+              matches = list(Path(".").glob("**/libil2cpp.so"))
+              if matches:
+                  binary = matches[0]
+          report = Path("native-disassembly/binary-check.txt")
+          if not binary.is_file():
+              report.write_text("ERROR: libil2cpp.so not found in runner workspace.\n")
+              raise SystemExit(0)
+          with binary.open("rb") as f:
+              magic = f.read(4)
+          if magic != b"\\x7fELF":
+              report.write_text(f"ERROR: file is not ELF; magic={magic!r}; path={binary}\n")
+              raise SystemExit(0)
+          report.write_text(f"Binary: {binary}\nSize: {binary.stat().st_size}\nELF magic: {magic!r}\n")
+          candidates = [
+              ("Character_MEKEMKCMCNN", 0x187B054),
+              ("Character_DOBMPDMNJBK", 0x187B41C),
+              ("Character_CKHMPNPJAJE", 0x187C0F4),
+              ("Character_EPNEPBPKCBH", 0x187D5F4),
+              ("Character_NEGGBOHACLG", 0x187DD58),
+              ("Character_INCNPAABEDN", 0x187DDD8),
+              ("Character_OMLNHJGBMOG", 0x187DEB8),
+              ("Character_IIOABFAHAGD", 0x187DF20),
+              ("Scene_Game_Update", 0x159C578),
+              ("Scene_Game_Start", 0x159D7F4),
+          ]
+          for name, address in candidates:
+              output = Path("native-disassembly") / f"{name}.txt"
+              lo, hi = max(0, address - 128), address + 256
+              cmd = ["llvm-objdump", "-d", f"--start-address={lo}", f"--stop-address={hi}", str(binary)]
+              try:
+                  p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                  body = f"Candidate: {name}\nAddress/RVA: 0x{address:x}\nWindow: 0x{lo:x}..0x{hi:x}\nExit code: {p.returncode}\n\n{p.stdout}\n{p.stderr}"
+              except Exception as e:
+                  body = f"Candidate: {name}\nAddress/RVA: 0x{address:x}\nERROR: {e}\n"
+              output.write_text(body)
+          print(report.read_text())
+          print("Disassembly report files:", len(list(Path("native-disassembly").glob("*.txt"))))
+          PY
 
       - name: Verify generated dump and summarize
         if: always()
