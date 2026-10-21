@@ -53,7 +53,7 @@ jobs:
               --user-agent "Mozilla/5.0" --referer "$DOWNLOAD_URL" "$START_URL" -o libil2cpp.download
             if ! python3 -c 'from pathlib import Path; import sys; sys.exit(0 if Path("libil2cpp.download").read_bytes()[:4] == b"\x7fELF" else 1)'; then
               echo "TransferNow still returned HTML; trying a real browser download."
-              python3 -m pip install --quiet playwright
+              python3 -m pip install --break-system-packages --quiet playwright
               python3 -m playwright install --with-deps chromium
               python3 - <<'PY'
           import asyncio, os, re
