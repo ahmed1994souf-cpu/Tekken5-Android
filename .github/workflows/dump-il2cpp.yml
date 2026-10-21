@@ -111,31 +111,33 @@ jobs:
           echo "Using metadata: $META"
           ls -lh "$META" libil2cpp.so
 
-      - name: Download Il2CppDumper
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build v39-capable Il2CppDumper fork from source
         run: |
           set -euo pipefail
-          API="https://api.github.com/repos/Perfare/Il2CppDumper/releases/latest"
-          curl --fail --location --retry 2 "$API" -o release.json
-          ASSET_URL="$(python3 - <<'PY'
-          import json
-          d=json.load(open("release.json"))
-          assets=d.get("assets", [])
-          matches=[a for a in assets if "linux" in a["name"].lower() and a["name"].lower().endswith(".zip")]
-          if not matches:
-              raise SystemExit("Could not find a Linux ZIP asset in the latest Il2CppDumper release.")
-          print(matches[0]["browser_download_url"])
-          PY
-          )"
-          curl --fail --location --retry 2 "$ASSET_URL" -o dumper.zip
-          mkdir dumper
-          unzip -q dumper.zip -d dumper
-          BIN="$(find dumper -type f -iname 'Il2CppDumper' -print -quit)"
-          if [ -z "$BIN" ]; then
-            echo "Il2CppDumper executable was not found in the release archive."
-            find dumper -maxdepth 3 -type f
+          # The upstream release path returned HTTP 403, and upstream v6.7.46
+          # explicitly rejects metadata version 39. Build the experimental v39
+          # fork from source instead of relying on a prebuilt macOS-only asset.
+          git clone --depth 1 https://github.com/burhanmoin1/Il2CppDumper-macos.git dumper-src
+          dotnet publish dumper-src/Il2CppDumper/Il2CppDumper.csproj \
+            --configuration Release \
+            --framework net8.0 \
+            --runtime linux-x64 \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            --output "$GITHUB_WORKSPACE/dumper"
+          BIN="$GITHUB_WORKSPACE/dumper/Il2CppDumper"
+          if [ ! -f "$BIN" ]; then
+            echo "Built Il2CppDumper executable was not found."
+            find "$GITHUB_WORKSPACE/dumper" -maxdepth 2 -type f -print
             exit 1
           fi
           chmod +x "$BIN"
+          "$BIN" --help || true
 
       - name: Run Il2CppDumper
         run: |
