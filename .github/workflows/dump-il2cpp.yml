@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       libil2cpp_url:
-        description: "Direct download URL for libil2cpp.so (TransferNow share page may not be a direct URL)"
+        description: "Direct download URL or TransferNow share link for libil2cpp.so"
         required: true
         type: string
         default: "https://www.transfernow.net/dl/20261021AnYkeiDs/bIZha9hd"
@@ -28,20 +28,52 @@ jobs:
           DOWNLOAD_URL: ${{ inputs.libil2cpp_url || 'https://www.transfernow.net/dl/20261021AnYkeiDs/bIZha9hd' }}
         run: |
           set -euo pipefail
+          # First try the supplied URL as a direct binary download.
           curl --fail --location --retry 2 --connect-timeout 20 --max-time 300 \
             --user-agent "Mozilla/5.0" "$DOWNLOAD_URL" -o libil2cpp.download
-          python3 - <<'PY'
+          if python3 -c 'from pathlib import Path; import sys; sys.exit(0 if Path("libil2cpp.download").read_bytes()[:4] == b"\\x7fELF" else 1)'; then
+            mv libil2cpp.download libil2cpp.so
+          else
+            echo "Share page detected; extracting the TransferNow download-start link."
+            python3 - <<'PY'
+          import html, json, re
           from pathlib import Path
-          p = Path("libil2cpp.download")
-          with p.open("rb") as f:
-              head = f.read(16)
-          if not head.startswith(b"\x7fELF"):
-              print("Download did not return an ELF shared library.")
+          s=Path("libil2cpp.download").read_text(errors="ignore")
+          m=re.search(r'<a href="([^"]*/d/start\\?[^"]*)"', s)
+          if not m:
+              raise SystemExit("Could not find TransferNow /d/start link in share page.")
+          start=html.unescape(m.group(1))
+          if start.startswith("/"):
+              start="https://www.transfernow.net"+start
+          Path("transfernow-start-url.txt").write_text(start)
+          print("Found download-start endpoint:", start)
+          PY
+            START_URL="$(cat transfernow-start-url.txt)"
+            curl --fail --location --retry 2 --connect-timeout 20 --max-time 300 \
+              --user-agent "Mozilla/5.0" --referer "$DOWNLOAD_URL" "$START_URL" -o libil2cpp.download
+            python3 - <<'PY'
+          from pathlib import Path
+          p=Path("libil2cpp.download")
+          head=p.read_bytes()[:16]
+          if not head.startswith(b"\\x7fELF"):
+              print("TransferNow did not return an ELF library after following its download-start link.")
+              print("Downloaded bytes:", p.stat().st_size)
               print("First bytes:", repr(head))
-              print("The TransferNow share page may require a browser or a direct download URL.")
-              raise SystemExit("Provide a direct file-download URL, or upload libil2cpp.so to this repository.")
+              raise SystemExit("Need a direct file URL or libil2cpp.so uploaded to the repository.")
           p.rename("libil2cpp.so")
           print("Verified ELF shared library; bytes:", Path("libil2cpp.so").stat().st_size)
+          PY
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("libil2cpp.so")
+          if not p.exists():
+              raise SystemExit("libil2cpp.so was not produced.")
+          with p.open("rb") as f:
+              head=f.read(16)
+          if not head.startswith(b"\\x7fELF"):
+              raise SystemExit("Final library failed ELF validation.")
+          print("Verified ELF shared library; bytes:", p.stat().st_size)
           PY
 
       - name: Locate metadata
@@ -75,17 +107,18 @@ jobs:
           curl --fail --location --retry 2 "$ASSET_URL" -o dumper.zip
           mkdir dumper
           unzip -q dumper.zip -d dumper
-          chmod +x "$(find dumper -type f -iname 'Il2CppDumper' -print -quit)"
-
-      - name: Run Il2CppDumper
-        run: |
-          set -euo pipefail
           BIN="$(find dumper -type f -iname 'Il2CppDumper' -print -quit)"
           if [ -z "$BIN" ]; then
             echo "Il2CppDumper executable was not found in the release archive."
             find dumper -maxdepth 3 -type f
             exit 1
           fi
+          chmod +x "$BIN"
+
+      - name: Run Il2CppDumper
+        run: |
+          set -euo pipefail
+          BIN="$(find dumper -type f -iname 'Il2CppDumper' -print -quit)"
           mkdir -p output
           "$BIN" "$GITHUB_WORKSPACE/libil2cpp.so" "$GITHUB_WORKSPACE/${{ steps.metadata.outputs.path }}" "$GITHUB_WORKSPACE/output" || {
             echo "Il2CppDumper failed. Common causes: metadata and libil2cpp.so are from different game versions/ABIs, or the binary is protected."
@@ -101,5 +134,7 @@ jobs:
           path: |
             output/
             libil2cpp.download
+            libil2cpp.so
+            transfernow-start-url.txt
           if-no-files-found: warn
           retention-days: 7
