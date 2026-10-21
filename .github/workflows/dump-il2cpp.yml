@@ -272,3 +272,4 @@ jobs:
             native-disassembly/
           if-no-files-found: warn
           retention-days: 14
+# Re-trigger native disassembly for combat candidates; source metadata and outputs remain unchanged.
