@@ -65,7 +65,7 @@ jobs:
                   page = await browser.new_page(accept_downloads=True)
                   await page.goto(os.environ["DOWNLOAD_URL"], wait_until="domcontentloaded", timeout=120000)
                   # TransferNow changes button wording across share-page versions.
-                  pattern = re.compile(r"download(\\s+(the\\s+)?file)?", re.I)
+                  pattern = re.compile(r"download(\s+(the\s+)?file)?", re.I)
                   candidates = [
                       page.get_by_role("link", name=pattern),
                       page.get_by_role("button", name=pattern),
