@@ -178,6 +178,38 @@ jobs:
             exit 1
           fi
 
+      - name: Disassemble combat candidate ranges (ARM64)
+        if: always() && hashFiles('libil2cpp.so') != ''
+        continue-on-error: true
+        run: |
+          set -u
+          sudo apt-get update -qq
+          sudo apt-get install -y llvm
+          mkdir -p native-disassembly
+          llvm-objdump --version | head -n 2 > native-disassembly/tool-version.txt
+          # Addresses below were cross-checked against dump.cs and script.json.
+          # Each window is a candidate region only; names do not establish behavior.
+          while read -r name address; do
+            start=$((address - 128))
+            stop=$((address + 256))
+            printf 'Candidate: %s\nAddress/RVA: 0x%x\nWindow: 0x%x..0x%x\n' \\
+              "$name" "$address" "$start" "$stop" > "native-disassembly/$name.txt"
+            llvm-objdump -d --start-address="$start" --stop-address="$stop" libil2cpp.so \\
+              >> "native-disassembly/$name.txt" 2>&1 || true
+          done <<'CANDIDATES'
+          Character_MEKEMKCMCNN 0x187B054
+          Character_DOBMPDMNJBK 0x187B41C
+          Character_CKHMPNPJAJE 0x187C0F4
+          Character_EPNEPBPKCBH 0x187D5F4
+          Character_NEGGBOHACLG 0x187DD58
+          Character_INCNPAABEDN 0x187DDD8
+          Character_OMLNHJGBMOG 0x187DEB8
+          Character_IIOABFAHAGD 0x187DF20
+          Scene_Game_Update 0x159C578
+          Scene_Game_Start 0x159D7F4
+          CANDIDATES
+          ls -lh native-disassembly || true
+
       - name: Verify generated dump and summarize
         if: always()
         run: |
