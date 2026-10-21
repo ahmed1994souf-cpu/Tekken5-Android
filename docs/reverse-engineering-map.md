@@ -1,62 +1,50 @@
-# Wrestling Empire 1.8.0 — Reverse-engineering map (working notes)
+# Wrestling Empire 1.8.0 — خريطة الهندسة العكسية
 
-## Status and evidence level
+## الحالة الحالية
 
-This document records evidence from the extracted IL2CPP string-literal table (`stringliteral.json`) and the current GitHub Actions attempt. It is a **static-analysis index**, not a recovered source-code map. A string being present does not prove which method uses it until IL2CPP method metadata and native references are available.
+تم تجاوز عائق استخراج IL2CPP: أنتج GitHub Actions تفريغًا بنيويًا ناجحًا، ثم فُحصت المكتبة الأصلية `libil2cpp.so` مباشرة باستخدام LLVM disassembler.
 
-Target repository: `ahmed1994souf-cpu/Tekken5-Android`  
-Target build: Wrestling Empire Android 1.8.0 (user-provided XAPK; exact ABI/library pairing still needs verification).  
-Metadata file path in repository: `takken 5/global-metadata.dat`
+- المستودع: `ahmed1994souf-cpu/Tekken5-Android`
+- ملف metadata: `takken 5/global-metadata.dat`
+- تفريغ ناجح: [GitHub Actions run 39660693165](https://github.com/ahmed1994souf-cpu/Tekken5-Android/actions/runs/39660693165)
+- فهرس التفريغ: [verified-il2cpp-dump-index.md](verified-il2cpp-dump-index.md)
+- أحدث تقرير: [NATIVE_DISASSEMBLY_CANDIDATES_10_AR.md](../takken%205/reverse-engineering/NATIVE_DISASSEMBLY_CANDIDATES_10_AR.md)
 
-## 1. Candidate gameplay subsystems
+## الأدلة البنيوية المؤكدة
 
-| Subsystem | Evidence from string table | Address | Confidence |
-|---|---|---:|---|
-| Player input / action mapping | `You can use either the ATTACK, RUN or PICK-UP commands` | `0x2667EE8` | High that the control tutorial exists; method mapping unknown |
-| Grappling / move continuation | `after a move by holding Attack or Grapple` | `0x2669BD0` | High that a grapple/action hint exists; state machine unknown |
-| Move selection / execution | `have 3 moves by pressing ATTACK, RUN, or PICK-UP.` | `0x266C5E8` | High that contextual move controls exist |
-| Hold / release logic | `You can release your hold at any time by pressing` | `0x2667EC8` | High that hold release is documented; exact input continuation not in this snippet |
-| Top-rope moves | `You can perform moves from the tope rope if you whip` | `0x2667EC0` | High that rope/top-rope actions are described |
-| Turnbuckle / apron traversal | `You can climb onto any of the turnbuckles or aprons - or even` | `0x2667E80` | High that climbable ring structures are documented |
-| Ring construction / rendering | `Painting ring with part=` | `0x2661780` | Medium: diagnostic string suggests a ring-painting routine, but implementation must be confirmed |\n| Arena generation | `Generating arena for fed=` | `0x265B700` | Medium-high: explicit arena-generation diagnostic; exact parameters and generated assets unknown |\n| Stacked-object climbing | `This is significant because you can climb up stacked` | `0x2665910` | Medium: tutorial points to climbable stacked objects; interaction code unknown |\n| Pinfall / match ending | `pin their opponent will win.`; `pinfall` | `0x266E780`, `0x266E788` | Medium-high that pinfall outcome text exists; win-condition method unknown |\n| AI behavior clue | `then they better improve the AI first!` | `0x266FE90` | Low: dialogue string mentions AI but does not identify the AI implementation |
-| Animation / combat state | `Evading crush with anim=` | `0x265A908` | Medium: diagnostic text suggests animation-dependent evade/crush logic |
-| Ground grappling | `Instant ground hold = ` | `0x265E0F0` | Medium: diagnostic text suggests ground-hold timing/state |
-| Arena / match rules | `Inside Ring`, `Announce Desk`, `Announcers`, `rope` | `0x265E0C8`, `0x26572E0`, `0x26572F0`, `0x266ECF8` | Medium: vocabulary identifies likely scene/match elements, not their owning methods |
-| Opponent scheduling / multi-opponent match | `A mystery opponent will enter the match every minute.`; `A new opponent will enter the chamber every 2 minutes.` | `0x2656A60`, `0x2656A68` | High that these match modes are represented; AI behavior unknown |
+| النظام | الدليل | ما الذي نعرفه؟ |
+|---|---|---|
+| الشخصية | `Character`, TypeDefIndex 116 | حقول الصحة والإصابة والموقع والأنيميشن وقوائم الحركات موجودة |
+| البيئة والحلبة | `World`, TypeDefIndex 43 | حقول الأرض وحدود العالم والساحة والحلبة والحبال وأجزائها موجودة |
+| إعداد المباراة | `Scene_Match_Setup`, TypeDefIndex 103 | توجد دوال اختيار المشاركين، والتحقق من صلاحية اللعب، والإضافة والإزالة |
+| حفظ المباراة والتقدم | `SaveData`, TypeDefIndex 192 | توجد إعدادات المباراة والحلبة والكاميرا والتحكم والصوت والتقدم |
+| نتائج المواجهات | `Segment`, TypeDefIndex 54 | حقول `match`, `result`, `leftChar`, `rightChar`, `winner` موجودة |
 
-## 2. Preliminary gameplay dependency map
+## أدلة القتال من السلاسل
 
-The following is a hypothesis for where to investigate next, not a claim that the code has already been recovered:
+ملف `stringliteral.json` يحتوي نصوصًا تشخيصية وتعليمات تتعلق بالمسك الأرضي، وحركات Tope، والسقوط عبر الحبال، وجانب التثبيت، والاستسلام أو الإقصاء. هذه النصوص تساعد في اختيار مواضع الفحص، لكنها لا تحدد وحدها الدالة التي تستخدمها أو تسلسل حالات القتال.
 
-1. **Input layer** — identify ATTACK / RUN / PICK-UP / Grapple input names and how touch controls map to them.
-2. **Context/action resolver** — determine how the same input selects strikes, holds, pickups, climbing, or follow-up moves.
-3. **Combat state** — trace hold, release, ground-hold, evade/crush, and animation timing strings to their native references.
-4. **Ring interaction** — identify ring parts (mat, ropes, turnbuckles, apron, announce desk) and the collision/interaction data controlling traversal.
-5. **Match controller** — locate rules, entrants, elimination, bell/winner flow, and timed opponent entry.
-6. **AI / decision logic** — only map after methods and call sites are recovered; the string table alone is not enough to infer opponent decision-making.
+## التحقق من المكتبة
 
-## 3. Current extraction blocker
+الملف الذي فُحص في المرحلة 10:
+- الحجم: 55,048,248 بايت.
+- ELF 64-bit، ARM AArch64، Android.
+- Build ID: `d32d84554cf9e27ee55d1933a9d5702066310c74`.
+- SHA-256: `08a31a15e7b64f7edac5e2d1998ea23d662fe413ab20e563d4182791003606ab`.
 
-GitHub Actions run `39655430862` failed at **Download libil2cpp.so**. The TransferNow URL returned an HTML page (first bytes `<!DOCTYPE html>`, approximately 97 KiB), not an ELF shared library. Consequently:
-- ELF validation correctly stopped the job.
-- `Locate metadata`, `Download Il2CppDumper`, and `Run Il2CppDumper` were skipped.
-- No `dump.cs` or method/type map was generated by this run.
+تم التحقق من أن عينات عناوين الدوال في `script.json` تتوافق مع RVA في `dump.cs`، كما ظهرت تعليمات AArch64 عند تلك العناوين. هذا يثبت وجود الكود عند العناوين المختارة، ولا يكشف وحده معنى الدوال.
 
-Run log: https://github.com/ahmed1994souf-cpu/Tekken5-Android/actions/runs/39655430862
+## الأولويات التالية
 
-## 4. Required next inputs / checks
+1. تتبع تعليمات الدوال المرشحة في `Character` وربطها بقراءات/كتابات حقول الحالة وقوائم الحركات.
+2. تحليل دوال `World` مع التركيز على هندسة الحلبة والحبال وحدود التصادم.
+3. البحث عن مسار إنهاء المباراة وربط حقول `Segment.winner` و`Segment.result` بنصوص pin/submission.
+4. تحديد حلقة اتخاذ القرار الخاصة بالخصوم قبل وصف أي دالة بأنها AI.
+5. تأكيد أن المكتبة والـmetadata من نفس حزمة Wrestling Empire 1.8.0 وABI نفسها قبل الاعتماد على RVAs لأي اختبار وقت تشغيل.
 
-To progress from string clues to method-level mapping, the workflow needs the **actual matching** `libil2cpp.so` from the same Wrestling Empire 1.8.0 Android package/ABI as `global-metadata.dat`. A share-page URL is insufficient unless it can be converted into a direct binary download.
+## حدود الاستنتاج
 
-Once the library is available, the workflow should:
-1. verify ELF magic and report file size/architecture;
-2. run Il2CppDumper against the matching metadata;
-3. preserve `dump.cs`, `script.json`, and any generated address/method files as an artifact;
-4. index candidate methods around the gameplay terms above;
-5. distinguish confirmed method references from hypotheses.
-
-## 5. Safety / accuracy notes
-
-- Do not patch the APK or redistribute game assets as part of this map.
-- String addresses are from the supplied string-literal table and should be checked against the exact library build before use.
-- Similar Unity/IL2CPP runtime strings may be engine/framework strings rather than Wrestling Empire-specific code.
+- أسماء الأساليب في `Character` و`World` مموهة، والتفريغ لا يعيد أجسام C# الأصلية.
+- عناوين السلاسل النصية ليست عناوين دوال.
+- لا توجد حتى الآن نتيجة مثبتة لخوارزمية الضرر أو آلة حالات المسك أو قرار AI أو شروط الفوز.
+- لا يُعد أي RVA ثابتًا بين إصدارات اللعبة المختلفة.
