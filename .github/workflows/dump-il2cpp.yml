@@ -1,5 +1,9 @@
 name: Dump Wrestling Empire IL2CPP
 on:
+  push:
+    paths:
+      - '.github/workflows/dump-il2cpp.yml'
+      - 'takken 5/global-metadata.dat'
   workflow_dispatch:
     inputs:
       libil2cpp_url:
@@ -31,7 +35,7 @@ jobs:
           p = Path("libil2cpp.download")
           with p.open("rb") as f:
               head = f.read(16)
-          if not head.startswith(b"\\x7fELF"):
+          if not head.startswith(b"\x7fELF"):
               print("Download did not return an ELF shared library.")
               print("First bytes:", repr(head))
               print("The TransferNow share page may require a browser or a direct download URL.")
