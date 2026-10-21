@@ -31,7 +31,7 @@ jobs:
           # First try the supplied URL as a direct binary download.
           curl --fail --location --retry 2 --connect-timeout 20 --max-time 300 \
             --user-agent "Mozilla/5.0" "$DOWNLOAD_URL" -o libil2cpp.download
-          if python3 -c 'from pathlib import Path; import sys; sys.exit(0 if Path("libil2cpp.download").read_bytes()[:4] == b"\\x7fELF" else 1)'; then
+          if python3 -c 'from pathlib import Path; import sys; sys.exit(0 if Path("libil2cpp.download").read_bytes()[:4] == b"\x7fELF" else 1)'; then
             mv libil2cpp.download libil2cpp.so
           else
             echo "Share page detected; extracting the TransferNow download-start link."
@@ -39,7 +39,7 @@ jobs:
           import html, json, re
           from pathlib import Path
           s=Path("libil2cpp.download").read_text(errors="ignore")
-          m=re.search(r'<a href="([^"]*/d/start\\?[^"]*)"', s)
+          m=re.search(r'<a href="([^"]*/d/start\?[^"]*)"', s)
           if not m:
               raise SystemExit("Could not find TransferNow /d/start link in share page.")
           start=html.unescape(m.group(1))
@@ -55,7 +55,7 @@ jobs:
           from pathlib import Path
           p=Path("libil2cpp.download")
           head=p.read_bytes()[:16]
-          if not head.startswith(b"\\x7fELF"):
+          if not head.startswith(b"\x7fELF"):
               print("TransferNow did not return an ELF library after following its download-start link.")
               print("Downloaded bytes:", p.stat().st_size)
               print("First bytes:", repr(head))
@@ -71,7 +71,7 @@ jobs:
               raise SystemExit("libil2cpp.so was not produced.")
           with p.open("rb") as f:
               head=f.read(16)
-          if not head.startswith(b"\\x7fELF"):
+          if not head.startswith(b"\x7fELF"):
               raise SystemExit("Final library failed ELF validation.")
           print("Verified ELF shared library; bytes:", p.stat().st_size)
           PY
