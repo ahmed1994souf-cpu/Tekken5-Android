@@ -248,5 +248,6 @@ jobs:
             output/
             dumper.log
             dump_summary.json
+            native-disassembly/
           if-no-files-found: warn
           retention-days: 14
