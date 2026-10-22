@@ -76,7 +76,10 @@ with binary.open("rb") as f:
                 elif mnem.startswith("ld") or mnem in {"ldp","ldnp","ldurb","ldurh","ldur"}:
                     access="READ candidate"
                 base_reg=ins.reg_name(op.mem.base) if op.mem.base else "none"
-                hits.append((ins.address, fields[disp], disp, access, mnem, ins.op_str, base_reg, method_at(ins.address)))
+                # Stack/frame accesses with matching numeric offsets are common false positives.
+                # Keep them visible for audit, but never elevate them to object-field candidates.
+                base_kind = "STACK/FRAME (exclude from object candidates)" if base_reg in {"sp", "x29", "fp"} else "NON-STACK base (object identity still unproven)"
+                hits.append((ins.address, fields[disp], disp, access, mnem, ins.op_str, base_reg, base_kind, method_at(ins.address)))
 
 lines=[
 "Character field-access scan (direct ARM64 memory operands)",
@@ -85,15 +88,15 @@ f"Methods indexed from script.json: {len(methods)}",
 f"Total matching instructions: {len(hits)}",
 "IMPORTANT: these are direct offset matches only; a match does not prove that the base register is a Character object.",
 "",
-"RVA | field | offset | access | instruction | base | nearest ScriptMethod",
+"RVA | field | offset | access | instruction | base | base classification | nearest ScriptMethod",
 ]
-for a,field,off,access,mnem,opstr,base,method in hits:
-    lines.append(f"0x{a:x} | {field} | 0x{off:x} | {access} | {mnem} {opstr} | {base} | {method}")
+for a,field,off,access,mnem,opstr,base,base_kind,method in hits:
+    lines.append(f"0x{a:x} | {field} | 0x{off:x} | {access} | {mnem} {opstr} | {base} | {base_kind} | {method}")
 
-lines += ["", "High-value WRITE candidates (health/injury/dead):"]
+lines += ["", "High-value NON-STACK WRITE candidates (health/injury/dead; object identity still unproven):"]
 for row in hits:
-    if row[1] in {"health","injury","dead"} and row[3].startswith("WRITE"):
-        lines.append(f"0x{row[0]:x} | {row[1]} | {row[3]} | {row[5]} | {row[7]}")
+    if row[1] in {"health","injury","dead"} and row[3].startswith("WRITE") and row[6] not in {"sp", "x29", "fp"}:
+        lines.append(f"0x{row[0]:x} | {row[1]} | {row[3]} | {row[5]} | base={row[6]} | {row[8]}")
 
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text("\n".join(lines)+"\n", encoding="utf-8")
