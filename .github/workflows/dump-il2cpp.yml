@@ -4,6 +4,7 @@ on:
     paths:
       - '.github/workflows/dump-il2cpp.yml'
       - 'takken 5/global-metadata.dat'
+      - 'takken 5/reverse-engineering/extract_arm64_string_xrefs.py'
   workflow_dispatch:
     inputs:
       libil2cpp_url:
@@ -284,6 +285,15 @@ jobs:
           Path("combat-string-index.txt").write_text("\\n".join(out)+"\\n", encoding="utf-8")
           print("Indexed combat-related strings:", len(rows))
           PY
+
+      - name: Scan ARM64 string references (experimental XREF)
+        if: always()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 -m pip install --break-system-packages --quiet pyelftools capstone
+          python3 "takken 5/reverse-engineering/extract_arm64_string_xrefs.py" \
+            libil2cpp.so output/stringliteral.json output/dump.cs native-disassembly/string-xrefs.txt
 
       - name: Upload dump results
         if: always()
