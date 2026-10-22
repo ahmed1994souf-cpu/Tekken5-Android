@@ -27,7 +27,9 @@ def number(v):
 
 data=json.loads(strings_json.read_text(errors="ignore"))
 targets={}
-rx=re.compile(r"attack|grapple|impact|injur|pinfall|pinning|submission|winner|damage|ground|throw|stun|knock|referee|count|match over|victory", re.I)
+rx=re.compile(r"attack|grapple|impact|injur|pinfall|pinning|submission|winner|damage|ground|throw|stun|knock|referee|victory|wrestl|finisher|ring ropes|ring the bell|fall only|counter attack|blocking|block an attack|move by holding", re.I)
+# Exclude common runtime/library diagnostics that match generic combat words accidentally.
+noise=re.compile(r"count must be|count cannot|count is greater|array or count|index.*count|argument.*count|count.*argument|collection.*count|invalid.*count|count.*positive|maximumcount|releasecount|spinCount|initialCount|charCount|byteCount|vertexCount|childCount|fieldCount|valueCount|valuesCount|periodCount|repeatCount|schemafragmentcount|parameters\.Count", re.I)
 for item in data:
     value=item.get("value", "")
     addr=number(item.get("address"))
@@ -36,11 +38,24 @@ for item in data:
 
 methods=[]
 if dump_cs.exists():
-    s=dump_cs.read_text(errors="ignore")
-    for m in re.finditer(r"// RVA:\s*(0x[0-9a-fA-F]+).*?\n(?:.*\n){0,3}?\s*(?:public|private|protected|internal).*?\s([A-Za-z_][A-Za-z0-9_]*)\s*\(", s):
-        try: methods.append((int(m.group(1),16),m.group(2)))
-        except Exception: pass
+    # Parse RVA comments and the method declaration on the following line(s).
+    # This avoids a fragile cross-line regex that can silently undercount methods.
+    lines=dump_cs.read_text(errors="ignore").splitlines()
+    rva_re=re.compile(r"// RVA:\\s*(0x[0-9a-fA-F]+)")
+    sig_re=re.compile(r"\\b(?:public|private|protected|internal)\\b.*?\\b([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+    for i,line in enumerate(lines):
+        rm=rva_re.search(line)
+        if not rm: continue
+        name=None
+        for candidate in lines[i+1:i+4]:
+            sm=sig_re.search(candidate)
+            if sm:
+                name=sm.group(1); break
+        if name:
+            try: methods.append((int(rm.group(1),16),name))
+            except Exception: pass
 methods.sort()
+
 def method_at(addr):
     lo,hi=0,len(methods)
     while lo<hi:
@@ -88,7 +103,8 @@ out.parent.mkdir(parents=True,exist_ok=True)
 lines=[
 "Experimental ARM64 string-reference scan",
 f"Binary: {binary} ({binary.stat().st_size} bytes)",
-f"Combat-like string addresses checked: {len(targets)}",
+f"Combat-like string addresses checked (filtered): {len(targets)}",
+f"Parsed method RVAs: {len(methods)}",
 f"ADRP+ADD/SUB candidate references: {len(hits)}",
 "Important: candidates require manual verification; nearest RVA method labels may be approximate.",
 "String address | ADRP RVA/VA | ADD/SUB RVA/VA | nearest method label | string"
