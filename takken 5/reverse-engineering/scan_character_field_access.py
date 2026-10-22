@@ -1,0 +1,100 @@
+#!/usr/bin/env python3
+"""Scan ARM64 IL2CPP code for direct Character field accesses.
+
+This is evidence collection only: a field access is not automatically a semantic
+meaning. The report groups reads/writes of health/injury/dead and move lists and
+labels the nearest ScriptMethod RVA when available.
+"""
+import json, sys
+from pathlib import Path
+from elftools.elf.elffile import ELFFile
+from capstone import Cs, CS_ARCH_ARM64, CS_MODE_ARM
+from capstone.arm64 import ARM64_OP_MEM, ARM64_OP_REG
+
+binary = Path(sys.argv[1] if len(sys.argv) > 1 else "libil2cpp.so")
+script_json = Path(sys.argv[2] if len(sys.argv) > 2 else "output/script.json")
+out = Path(sys.argv[3] if len(sys.argv) > 3 else "native-disassembly/character-field-access.txt")
+fields = {
+    0xA0: "health",
+    0xA8: "injury",
+    0xAC: "injuryTime",
+    0xB0: "dead",
+    0xF0: "moveFront",
+    0xF8: "moveBack",
+    0x100: "moveGround",
+    0x108: "moveAttack",
+    0x110: "moveCrush",
+}
+
+def number(v):
+    if isinstance(v, int): return v
+    if isinstance(v, str):
+        try: return int(v.strip(), 0)
+        except ValueError:
+            try: return int(v.strip(), 16)
+            except ValueError: return None
+    return None
+
+methods=[]
+if script_json.exists():
+    try:
+        data=json.loads(script_json.read_text(errors="ignore"))
+        for m in data.get("ScriptMethod", []):
+            a=number(m.get("Address")); n=m.get("Name")
+            if a is not None and isinstance(n,str): methods.append((a,n))
+    except Exception as e:
+        print("script.json parse warning:", e)
+methods.sort()
+
+def method_at(addr):
+    lo,hi=0,len(methods)
+    while lo<hi:
+        mid=(lo+hi)//2
+        if methods[mid][0] <= addr: lo=mid+1
+        else: hi=mid
+    return methods[lo-1][1] if lo else "unknown"
+
+md=Cs(CS_ARCH_ARM64, CS_MODE_ARM); md.detail=True
+hits=[]
+with binary.open("rb") as f:
+    elf=ELFFile(f)
+    for seg in elf.iter_segments():
+        if seg["p_type"] != "PT_LOAD" or not (int(seg["p_flags"]) & 1):
+            continue
+        base=int(seg["p_vaddr"])
+        for ins in md.disasm(seg.data(), base):
+            for op in ins.operands:
+                if op.type != ARM64_OP_MEM:
+                    continue
+                disp=int(op.mem.disp)
+                if disp not in fields:
+                    continue
+                access="read/write candidate"
+                mnem=ins.mnemonic.lower()
+                if mnem.startswith("st") or mnem in {"stp","stnp","sturb","sturh","stur"}:
+                    access="WRITE candidate"
+                elif mnem.startswith("ld") or mnem in {"ldp","ldnp","ldurb","ldurh","ldur"}:
+                    access="READ candidate"
+                base_reg=ins.reg_name(op.mem.base) if op.mem.base else "none"
+                hits.append((ins.address, fields[disp], disp, access, mnem, ins.op_str, base_reg, method_at(ins.address)))
+
+lines=[
+"Character field-access scan (direct ARM64 memory operands)",
+f"Binary: {binary} ({binary.stat().st_size} bytes)",
+f"Methods indexed from script.json: {len(methods)}",
+f"Total matching instructions: {len(hits)}",
+"IMPORTANT: these are direct offset matches only; a match does not prove that the base register is a Character object.",
+"",
+"RVA | field | offset | access | instruction | base | nearest ScriptMethod",
+]
+for a,field,off,access,mnem,opstr,base,method in hits:
+    lines.append(f"0x{a:x} | {field} | 0x{off:x} | {access} | {mnem} {opstr} | {base} | {method}")
+
+lines += ["", "High-value WRITE candidates (health/injury/dead):"]
+for row in hits:
+    if row[1] in {"health","injury","dead"} and row[3].startswith("WRITE"):
+        lines.append(f"0x{row[0]:x} | {row[1]} | {row[3]} | {row[5]} | {row[7]}")
+
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text("\n".join(lines)+"\n", encoding="utf-8")
+print(f"Wrote {len(hits)} matching instructions to {out}")
