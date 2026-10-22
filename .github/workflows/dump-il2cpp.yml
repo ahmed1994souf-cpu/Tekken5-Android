@@ -293,7 +293,7 @@ jobs:
           set -euo pipefail
           python3 -m pip install --break-system-packages --quiet pyelftools capstone
           python3 "takken 5/reverse-engineering/extract_arm64_string_xrefs.py" \
-            libil2cpp.so output/stringliteral.json output/dump.cs native-disassembly/string-xrefs.txt
+            libil2cpp.so output/stringliteral.json output/script.json native-disassembly/string-xrefs.txt
 
       - name: Upload dump results
         if: always()
