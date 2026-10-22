@@ -29,7 +29,7 @@ data=json.loads(strings_json.read_text(errors="ignore"))
 targets={}
 rx=re.compile(r"attack|grapple|impact|injur|pinfall|pinning|submission|winner|damage|ground|throw|stun|knock|referee|victory|wrestl|finisher|ring ropes|ring the bell|fall only|counter attack|blocking|block an attack|move by holding", re.I)
 # Exclude common runtime/library diagnostics that match generic combat words accidentally.
-noise=re.compile(r"count must be|count cannot|count is greater|array or count|index.*count|argument.*count|count.*argument|collection.*count|invalid.*count|count.*positive|maximumcount|releasecount|spinCount|initialCount|charCount|byteCount|vertexCount|childCount|fieldCount|valueCount|valuesCount|periodCount|repeatCount|schemafragmentcount|parameters\.Count", re.I)
+noise=re.compile(r"^count$|count must be positive and count must refer to a location|offset and length were out of bounds for the array|^count cannot be|^count must be|^argument count must|^bounds count cannot|^cachecount:|^command count\s*:|^array or count|^collection.*count|^index.*count|^dataset\.|^datatable\.|^a task.s exception|^an exception was thrown|^exception has been thrown|^end of stream encountered|^additional text encountered after finished reading json|^buffer too small|^invalid string length|^adding the specified count to the semaphore", re.I)
 for item in data:
     value=item.get("value", "")
     addr=number(item.get("address"))
