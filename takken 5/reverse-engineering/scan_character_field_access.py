@@ -98,6 +98,21 @@ for row in hits:
     if row[1] in {"health","injury","dead"} and row[3].startswith("WRITE") and row[6] not in {"sp", "x29", "fp"}:
         lines.append(f"0x{row[0]:x} | {row[1]} | {row[3]} | {row[5]} | base={row[6]} | {row[8]}")
 
+# Narrow follow-up: only instructions attributed to methods whose metadata name
+# belongs to the game's Character class. This avoids treating unrelated Unity
+# classes that happen to use the same numeric offsets as character logic.
+lines += ["", "Character-method-only WRITE candidates (still static candidates, not semantic proof):"]
+character_rows = [
+    row for row in hits
+    if row[8].startswith("Character$")
+    and row[1] in {"health", "injury", "injuryTime", "dead", "moveFront", "moveBack", "moveGround", "moveAttack", "moveCrush"}
+    and row[3] == "WRITE candidate"
+    and row[6] not in {"sp", "x29", "fp"}
+]
+for row in character_rows:
+    lines.append(f"0x{row[0]:x} | {row[1]} | {row[3]} | {row[5]} | base={row[6]} | method={row[8]}")
+lines.append(f"Character-method-only non-stack writes: {len(character_rows)}")
+
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text("\n".join(lines)+"\n", encoding="utf-8")
 print(f"Wrote {len(hits)} matching instructions to {out}")
