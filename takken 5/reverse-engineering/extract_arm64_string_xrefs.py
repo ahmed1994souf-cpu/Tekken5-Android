@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Experimental ARM64 ADRP+ADD string-reference scanner for Wrestling Empire IL2CPP."""
+"""Experimental ARM64 string-reference scanner with VA/RVA diagnostics for Wrestling Empire IL2CPP."""
 import json, re, sys
 from pathlib import Path
 from elftools.elf.elffile import ELFFile
@@ -63,6 +63,8 @@ def method_at(addr):
 md=Cs(CS_ARCH_ARM64, CS_MODE_ARM)
 md.detail=True
 hits=[]
+adr_hits=[]
+segment_report=[]
 with binary.open("rb") as f:
     elf=ELFFile(f)
     if elf.header["e_machine"] != "EM_AARCH64":
@@ -73,11 +75,16 @@ with binary.open("rb") as f:
         if seg["p_type"] != "PT_LOAD" or not (int(seg["p_flags"]) & 1):
             continue
         base=int(seg["p_vaddr"]); blob=seg.data()
+        segment_report.append((base, base + int(seg["p_memsz"]), int(seg["p_offset"]), int(seg["p_filesz"]), bool(int(seg["p_flags"]) & 1)))
         # Stream disassembly instead of retaining millions of instructions in RAM.
         pending={}
         for ins in md.disasm(blob,base):
             pending={reg:item for reg,item in pending.items() if item[2] >= ins.address}
             ops=ins.operands
+            if ins.mnemonic == "adr" and len(ops)>=2 and ops[0].type==ARM64_OP_REG and ops[1].type==ARM64_OP_IMM:
+                dest=int(ops[1].imm)
+                if dest in targets:
+                    adr_hits.append((dest, ins.address, method_at(ins.address), "; ".join(targets[dest])))
             if ins.mnemonic == "adrp" and len(ops)>=2 and ops[0].type==ARM64_OP_REG and ops[1].type==ARM64_OP_IMM:
                 pending[ops[0].reg]=(int(ops[1].imm),ins.address,ins.address+16)
                 continue
@@ -101,12 +108,19 @@ f"Binary: {binary} ({binary.stat().st_size} bytes)",
 f"Combat-like string addresses checked (filtered): {len(targets)}",
 f"Resolved method addresses from script.json: {len(methods)}",
 f"ADRP+ADD/SUB candidate references: {len(hits)}",
+f"ADR direct candidate references: {len(adr_hits)}",
+f"String target address range: {hex(min(targets)) if targets else \"none\"} .. {hex(max(targets)) if targets else \"none\"}",
+f"String targets falling inside any PT_LOAD virtual range: {sum(1 for a in targets if any(lo <= a < hi for lo,hi,off,fs,ex in segment_report))}",
+"PT_LOAD ranges (VA start..end | file offset | file size | executable):",
+*[f"0x{lo:x}..0x{hi:x} | off=0x{off:x} | filesz=0x{fs:x} | exec={ex}" for lo,hi,off,fs,ex in segment_report],
 "Important: candidates require manual verification; nearest RVA method labels may be approximate.",
-"String address | ADRP RVA/VA | ADD/SUB RVA/VA | nearest method label | string"
+"ADR direct references: string address | instruction VA | nearest method label | string",
+*[f"0x{addr:x} | 0x{va:x} | {method} | {val}" for addr,va,method,val in sorted(adr_hits,key=lambda x:x[1])],
+"ADRP+ADD/SUB references: string address | ADRP VA | ADD/SUB VA | nearest method label | string"
 ]
 for addr,addva,adrpva,method,val in sorted(hits,key=lambda x:x[1]):
     lines.append(f"0x{addr:x} | 0x{adrpva:x} | 0x{addva:x} | {method} | {val}")
-if not hits:
-    lines.append("No exact ADRP+ADD/SUB references matched. This can mean string addresses use a different address basis or the compiler uses another addressing sequence; it does not prove the strings are unused.")
+if not hits and not adr_hits:
+    lines.append("No exact ADR or ADRP+ADD/SUB references matched. Use the segment and target-range diagnostics above to check VA/RVA/file-offset normalization before interpreting this as evidence about usage.")
 out.write_text("\n".join(lines)+"\n",encoding="utf-8")
 print("\n".join(lines[:12]))
