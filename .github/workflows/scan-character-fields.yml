@@ -1,0 +1,65 @@
+name: Scan Character Combat Fields
+
+on:
+  push:
+    paths:
+      - 'takken 5/reverse-engineering/scan_character_field_access.py'
+      - '.github/workflows/scan-character-fields.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout analysis scripts
+        uses: actions/checkout@v4
+
+      - name: Find latest successful IL2CPP artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RUN_ID="$(gh run list --workflow dump-il2cpp.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "$RUN_ID" ]; then
+            echo "No successful dump-il2cpp workflow run was found."
+            exit 1
+          fi
+          echo "Using successful dump workflow run: $RUN_ID"
+          mkdir -p artifact
+          gh run download "$RUN_ID" --name wrestling-empire-il2cpp-dump --dir artifact
+          find artifact -maxdepth 3 -type f -printf '%p %s bytes\n' | sort
+
+      - name: Locate binary and script.json
+        run: |
+          set -euo pipefail
+          BIN="$(find artifact -type f -name libil2cpp.so -print -quit)"
+          SCRIPT="$(find artifact -type f -name script.json -print -quit)"
+          if [ -z "$BIN" ] || [ -z "$SCRIPT" ]; then
+            echo "Required artifact files were not found."
+            exit 1
+          fi
+          echo "BIN=$BIN" >> "$GITHUB_ENV"
+          echo "SCRIPT=$SCRIPT" >> "$GITHUB_ENV"
+          ls -lh "$BIN" "$SCRIPT"
+
+      - name: Install ARM64 analysis libraries
+        run: python3 -m pip install --break-system-packages --quiet pyelftools capstone
+
+      - name: Scan Character health/injury/dead and move fields
+        run: |
+          set -euo pipefail
+          python3 'takken 5/reverse-engineering/scan_character_field_access.py' \
+            "$BIN" "$SCRIPT" character-field-access.txt
+          sed -n '1,80p' character-field-access.txt
+
+      - name: Upload field access report
+        uses: actions/upload-artifact@v4
+        with:
+          name: character-field-access-report
+          path: character-field-access.txt
+          retention-days: 14
