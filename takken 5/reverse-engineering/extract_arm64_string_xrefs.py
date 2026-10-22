@@ -72,10 +72,16 @@ with binary.open("rb") as f:
         out.write_text("XREF scan skipped: ELF is not AArch64.\n")
         sys.exit(0)
     for seg in elf.iter_segments():
-        if seg["p_type"] != "PT_LOAD" or not (int(seg["p_flags"]) & 1):
+        if seg["p_type"] != "PT_LOAD":
             continue
-        base=int(seg["p_vaddr"]); blob=seg.data()
-        segment_report.append((base, base + int(seg["p_memsz"]), int(seg["p_offset"]), int(seg["p_filesz"]), bool(int(seg["p_flags"]) & 1)))
+        base=int(seg["p_vaddr"])
+        executable=bool(int(seg["p_flags"]) & 1)
+        segment_report.append((base, base + int(seg["p_memsz"]), int(seg["p_offset"]), int(seg["p_filesz"]), executable))
+        # String targets normally live in non-executable PT_LOAD segments too.
+        # Record every load segment for VA diagnostics, but disassemble code only.
+        if not executable:
+            continue
+        blob=seg.data()
         # Stream disassembly instead of retaining millions of instructions in RAM.
         pending={}
         for ins in md.disasm(blob,base):
@@ -111,7 +117,7 @@ f"ADRP+ADD/SUB candidate references: {len(hits)}",
 f"ADR direct candidate references: {len(adr_hits)}",
 f"String target address range: {hex(min(targets)) if targets else 'none'} .. {hex(max(targets)) if targets else 'none'}",
 f"String targets falling inside any PT_LOAD virtual range: {sum(1 for a in targets if any(lo <= a < hi for lo,hi,off,fs,ex in segment_report))}",
-"PT_LOAD ranges (VA start..end | file offset | file size | executable):",
+"All PT_LOAD ranges (VA start..end | file offset | file size | executable):",
 *[f"0x{lo:x}..0x{hi:x} | off=0x{off:x} | filesz=0x{fs:x} | exec={ex}" for lo,hi,off,fs,ex in segment_report],
 "Important: candidates require manual verification; nearest RVA method labels may be approximate.",
 "ADR direct references: string address | instruction VA | nearest method label | string",
