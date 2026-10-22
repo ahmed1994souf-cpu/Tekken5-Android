@@ -63,21 +63,26 @@ with binary.open("rb") as f:
         if seg["p_type"] != "PT_LOAD" or not (int(seg["p_flags"]) & 1):
             continue
         base=int(seg["p_vaddr"]); blob=seg.data()
-        ins=list(md.disasm(blob,base))
-        for i,ad in enumerate(ins):
-            if ad.mnemonic != "adrp" or len(ad.operands)<2 or ad.operands[1].type != ARM64_OP_IMM:
+        # Stream disassembly instead of retaining millions of instructions in RAM.
+        pending={}
+        for ins in md.disasm(blob,base):
+            pending={reg:item for reg,item in pending.items() if item[2] >= ins.address}
+            ops=ins.operands
+            if ins.mnemonic == "adrp" and len(ops)>=2 and ops[0].type==ARM64_OP_REG and ops[1].type==ARM64_OP_IMM:
+                pending[ops[0].reg]=(int(ops[1].imm),ins.address,ins.address+16)
                 continue
-            reg=ad.operands[0].reg
-            page=int(ad.operands[1].imm)
-            # Search a few subsequent instructions for ADD immediate based on the ADRP destination.
-            for nxt in ins[i+1:i+5]:
-                ops=nxt.operands
-                if nxt.mnemonic in ("add","sub") and len(ops)>=3 and ops[0].type==ARM64_OP_REG and ops[1].type==ARM64_OP_REG and ops[1].reg==reg and ops[2].type==ARM64_OP_IMM:
-                    dest=page + (int(ops[2].imm) if nxt.mnemonic=="add" else -int(ops[2].imm))
-                    if dest in targets:
-                        hits.append((dest,nxt.address,ad.address,method_at(ad.address),"; ".join(targets[dest])))
-                    # Do not keep searching through unrelated register transformations.
-                    break
+            if ins.mnemonic not in ("add","sub") or len(ops)<3:
+                continue
+            if ops[0].type!=ARM64_OP_REG or ops[1].type!=ARM64_OP_REG or ops[2].type!=ARM64_OP_IMM:
+                continue
+            reg=ops[1].reg
+            if reg not in pending:
+                continue
+            page,adrpva,_=pending[reg]
+            dest=page + (int(ops[2].imm) if ins.mnemonic=="add" else -int(ops[2].imm))
+            if dest in targets:
+                hits.append((dest,ins.address,adrpva,method_at(adrpva),"; ".join(targets[dest])))
+            pending.pop(reg,None)
 
 out.parent.mkdir(parents=True,exist_ok=True)
 lines=[
