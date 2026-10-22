@@ -8,7 +8,7 @@ from capstone.arm64 import ARM64_OP_REG, ARM64_OP_IMM
 
 binary = Path(sys.argv[1] if len(sys.argv) > 1 else "libil2cpp.so")
 strings_json = Path(sys.argv[2] if len(sys.argv) > 2 else "output/stringliteral.json")
-dump_cs = Path(sys.argv[3] if len(sys.argv) > 3 else "output/dump.cs")
+script_json = Path(sys.argv[3] if len(sys.argv) > 3 else "output/script.json")
 out = Path(sys.argv[4] if len(sys.argv) > 4 else "native-disassembly/string-xrefs.txt")
 if not binary.exists() or not strings_json.exists():
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -37,23 +37,18 @@ for item in data:
         targets.setdefault(addr,[]).append(value.replace("\n"," ").replace("\r"," ")[:180])
 
 methods=[]
-if dump_cs.exists():
-    # Parse RVA comments and the method declaration on the following line(s).
-    # This avoids a fragile cross-line regex that can silently undercount methods.
-    lines=dump_cs.read_text(errors="ignore").splitlines()
-    rva_re=re.compile(r"// RVA:\\s*(0x[0-9a-fA-F]+)")
-    sig_re=re.compile(r"\\b(?:public|private|protected|internal)\\b.*?\\b([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
-    for i,line in enumerate(lines):
-        rm=rva_re.search(line)
-        if not rm: continue
-        name=None
-        for candidate in lines[i+1:i+4]:
-            sm=sig_re.search(candidate)
-            if sm:
-                name=sm.group(1); break
-        if name:
-            try: methods.append((int(rm.group(1),16),name))
-            except Exception: pass
+if script_json.exists():
+    # script.json contains resolved method names and addresses, including generic
+    # instantiations that are not represented by ordinary RVA comments in dump.cs.
+    try:
+        script_data=json.loads(script_json.read_text(errors="ignore"))
+        for method in script_data.get("ScriptMethod", []):
+            addr=number(method.get("Address"))
+            name=method.get("Name")
+            if addr is not None and isinstance(name,str) and name:
+                methods.append((addr,name))
+    except (ValueError, TypeError, AttributeError) as exc:
+        print(f"Could not parse ScriptMethod entries: {exc}")
 methods.sort()
 
 def method_at(addr):
@@ -104,7 +99,7 @@ lines=[
 "Experimental ARM64 string-reference scan",
 f"Binary: {binary} ({binary.stat().st_size} bytes)",
 f"Combat-like string addresses checked (filtered): {len(targets)}",
-f"Parsed method RVAs: {len(methods)}",
+f"Resolved method addresses from script.json: {len(methods)}",
 f"ADRP+ADD/SUB candidate references: {len(hits)}",
 "Important: candidates require manual verification; nearest RVA method labels may be approximate.",
 "String address | ADRP RVA/VA | ADD/SUB RVA/VA | nearest method label | string"
