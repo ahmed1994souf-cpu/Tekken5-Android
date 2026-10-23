@@ -237,7 +237,7 @@ jobs:
           ]
           for name, address in candidates:
               output = Path("native-disassembly") / f"{name}.txt"
-              lo, hi = max(0, address - 128), address + 256
+              lo, hi = max(0, address - 32), address + 4096  # wider window to trace callers and model/asset operations
               cmd = ["llvm-objdump", "-d", f"--start-address={lo}", f"--stop-address={hi}", str(binary)]
               try:
                   p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
