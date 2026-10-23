@@ -225,6 +225,15 @@ jobs:
               ("Costume_JBECIKIBKIP", 0x16662E0),
               ("Costume_ECNCADEADNG", 0x16673A4),
               ("Costume_ACIGFMENHIE", 0x16684B4),
+              # Character methods that accept Costume/model configuration:
+              ("Character_IKKBADFHKAL", 0x1887EC4),
+              ("Character_BFDFOCBGFBP", 0x187D218),
+              # Additional Costume methods to compare shape, texture and color handling:
+              ("Costume_BJALLCKDACJ", 0x1666F90),
+              ("Costume_NLDODOJBPHP", 0x1668E28),
+              ("Costume_EGHLMOHFHOL", 0x16695EC),
+              ("Costume_JENEJOJNOOP", 0x1667FF8),
+              ("Costume_AJAFNCJDPCD", 0x1668160),
           ]
           for name, address in candidates:
               output = Path("native-disassembly") / f"{name}.txt"
