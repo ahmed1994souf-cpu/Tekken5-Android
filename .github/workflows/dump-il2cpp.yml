@@ -217,6 +217,14 @@ jobs:
               ("Character_IIOABFAHAGD", 0x187DF20),
               ("Scene_Game_Update", 0x159C578),
               ("Scene_Game_Start", 0x159D7F4),
+              # Costume/model pipeline candidates from dump.cs (RVA values):
+              ("Costume_PFCOCIOEFBN", 0x1663F6C),
+              ("Costume_MFBNABEJFIE", 0x1665040),
+              ("Costume_CHCBMJCHBOF", 0x166529C),
+              ("Costume_JGEE DIAOKBM".replace(" ", ""), 0x1665AF4),
+              ("Costume_JBECIKIBKIP", 0x16662E0),
+              ("Costume_ECNCADEADNG", 0x16673A4),
+              ("Costume_ACIGFMENHIE", 0x16684B4),
           ]
           for name, address in candidates:
               output = Path("native-disassembly") / f"{name}.txt"
